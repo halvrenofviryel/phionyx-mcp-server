@@ -12,7 +12,7 @@ Threat surface aligned with **arXiv:[2512.06556](https://arxiv.org/abs/2512.0655
 
 ## Status
 
-**v0.1.0-dev.** 5 of 8 capabilities fully implemented; 3 stubbed; the 2 load-bearing ones (descriptor verify + tool call audit) are live. Shared-trace contract with the companion [`phionyx-pipeline-mcp`](https://github.com/halvrenofviryel/phionyx-pipeline-mcp) is implemented and tested. Not yet on PyPI — install from source.
+**v0.1.0.** 5 of 8 capabilities fully implemented; 3 stubbed; the 2 load-bearing ones (descriptor verify + tool call audit) are live. Shared-trace contract with the companion [`phionyx-pipeline-mcp`](https://github.com/halvrenofviryel/phionyx-pipeline-mcp) is implemented and tested. Published on PyPI 2026-05-23 (`pip install phionyx-mcp-server`).
 
 | # | Capability | Status |
 |---|---|---|
@@ -29,12 +29,18 @@ Threat surface aligned with **arXiv:[2512.06556](https://arxiv.org/abs/2512.0655
 ## Install
 
 ```bash
-git clone https://github.com/halvrenofviryel/phionyx-mcp-server.git
-cd phionyx-mcp-server
-pip install -e .
+pip install phionyx-mcp-server
 
 # Verify CLI:
 phionyx-mcp --help
+```
+
+Or from source (development):
+
+```bash
+git clone https://github.com/halvrenofviryel/phionyx-mcp-server.git
+cd phionyx-mcp-server
+pip install -e .
 ```
 
 ## Use — as an MCP server
