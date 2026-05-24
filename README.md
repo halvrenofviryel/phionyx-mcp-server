@@ -92,15 +92,22 @@ Envelopes are written under `$PHIONYX_MCP_AUDIT_ROOT` (default `~/.phionyx/mcp_a
 
 Swap the persistence layer by passing an alternative `EnvelopeStore`-protocol implementation.
 
-## Companion package: phionyx-pipeline-mcp
+## Where this fits on phionyx.ai
 
-`phionyx-mcp-server` is the **outward-facing** layer: it sees the host calling a third-party MCP server and signs evidence of that call.
+This package surfaces under [**phionyx.ai/bounded-authority**](https://phionyx.ai/bounded-authority) — the safety-first AI providers entry. It is the outward-facing MCP trust boundary that turns each third-party tool call into signed, replayable governance evidence.
 
-A companion package, [`phionyx-pipeline-mcp`](https://github.com/halvrenofviryel/phionyx-pipeline-mcp), is the **inward-facing** layer: it gates the AI agent's own *"I fixed this / I tested that / this code path changed"* declarations against `git diff` truth and a deterministic physics gate.
+## Companion packages
 
-When both packages are installed and registered with a Claude Code host, they agree on a single `trace_id` per session via `PHIONYX_TRACE_ID` (with `~/.phionyx/active_trace` fallback). One Claude Code conversation = one trace = end-to-end view of every third-party tool call AND every agent self-claim gate decision.
+`phionyx-mcp-server` is the **outward-facing** layer: it sees the host calling a third-party MCP server and signs evidence of that call. Four siblings extend the runtime into adjacent layers:
 
-The contract: both packages read `PHIONYX_TRACE_ID` first, then `PHIONYX_ACTIVE_TRACE_FILE` (default `~/.phionyx/active_trace`); the first caller persists a generated UUID. `pipeline-mcp` reads this server's envelope chain via the public `FilesystemEnvelopeStore` + `verify_chain` API (read-only — no cross-package write coupling).
+- [`phionyx-pipeline-mcp`](https://github.com/halvrenofviryel/phionyx-pipeline-mcp) — *inward-facing MCP layer.* Gates the AI agent's own *"I fixed this / I tested that / this code path changed"* declarations against `git diff` truth and a deterministic physics gate.
+- [`phionyx-eval-inspect`](https://github.com/halvrenofviryel/phionyx-eval-inspect) — *Inspect AI bridge.* Convert a Phionyx envelope chain into an Inspect `.eval` log. Interop-only; no UK AISI endorsement claim.
+- [`phionyx-langchain-langgraph`](https://github.com/halvrenofviryel/phionyx_langchain_langgraph) — *LangChain + LangGraph adapters (v0.5.0+, alpha).* Every chain / tool / LLM event + supervisor handoff becomes a signed envelope.
+- [`phionyx-openai-agents`](https://github.com/halvrenofviryel/phionyx_openai_agents) — *OpenAI Agents SDK tracing bridge (v0.5.0+, alpha).* Every Trace and Span becomes a signed envelope.
+
+When `phionyx-mcp-server` + `phionyx-pipeline-mcp` are installed and registered with a Claude Code host, they agree on a single `trace_id` per session via `PHIONYX_TRACE_ID` (with `~/.phionyx/active_trace` fallback). One Claude Code conversation = one trace = end-to-end view of every third-party tool call AND every agent self-claim gate decision. The Inspect bridge and the framework adapters consume envelopes off-host; they don't need to share the live trace.
+
+The MCP-pair contract: both packages read `PHIONYX_TRACE_ID` first, then `PHIONYX_ACTIVE_TRACE_FILE` (default `~/.phionyx/active_trace`); the first caller persists a generated UUID. `pipeline-mcp` reads this server's envelope chain via the public `FilesystemEnvelopeStore` + `verify_chain` API (read-only — no cross-package write coupling).
 
 ## Schema
 
@@ -137,6 +144,8 @@ AGPL-3.0-or-later. See [`LICENSE`](LICENSE).
 
 ## See also
 
+- [phionyx.ai/bounded-authority](https://phionyx.ai/bounded-authority) — entry pillar this package surfaces under
+- [phionyx.ai/evidence](https://phionyx.ai/evidence) — Evidence Matrix: every load-bearing claim paired with a reviewer-runnable command
 - Project hub: [github.com/halvrenofviryel/phionyx-research](https://github.com/halvrenofviryel/phionyx-research)
 - Phionyx Core SDK (PyPI): [`phionyx-core`](https://pypi.org/project/phionyx-core/)
-- Pipeline MCP (agent self-claim gate): [halvrenofviryel/phionyx-pipeline-mcp](https://github.com/halvrenofviryel/phionyx-pipeline-mcp)
+- All five companion packages — see the [Companion packages](#companion-packages) section above
