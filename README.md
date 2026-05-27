@@ -102,8 +102,8 @@ This package surfaces under [**phionyx.ai/bounded-authority**](https://phionyx.a
 
 - [`phionyx-pipeline-mcp`](https://github.com/halvrenofviryel/phionyx-pipeline-mcp) — *inward-facing MCP layer.* Gates the AI agent's own *"I fixed this / I tested that / this code path changed"* declarations against `git diff` truth and a deterministic physics gate.
 - [`phionyx-eval-inspect`](https://github.com/halvrenofviryel/phionyx-eval-inspect) — *Inspect AI bridge.* Convert a Phionyx envelope chain into an Inspect `.eval` log. Interop-only; no UK AISI endorsement claim.
-- [`phionyx-langchain-langgraph`](https://github.com/halvrenofviryel/phionyx_langchain_langgraph) — *LangChain + LangGraph adapters (v0.5.0+, alpha).* Every chain / tool / LLM event + supervisor handoff becomes a signed envelope.
-- [`phionyx-openai-agents`](https://github.com/halvrenofviryel/phionyx_openai_agents) — *OpenAI Agents SDK tracing bridge (v0.5.0+, alpha).* Every Trace and Span becomes a signed envelope.
+- [`phionyx-langchain-langgraph`](https://github.com/halvrenofviryel/phionyx-langchain-langgraph) — *LangChain + LangGraph adapters (v0.5.0+, alpha).* Every chain / tool / LLM event + supervisor handoff becomes a signed envelope.
+- [`phionyx-openai-agents`](https://github.com/halvrenofviryel/phionyx-openai-agents) — *OpenAI Agents SDK tracing bridge (v0.5.0+, alpha).* Every Trace and Span becomes a signed envelope.
 
 When `phionyx-mcp-server` + `phionyx-pipeline-mcp` are installed and registered with a Claude Code host, they agree on a single `trace_id` per session via `PHIONYX_TRACE_ID` (with `~/.phionyx/active_trace` fallback). One Claude Code conversation = one trace = end-to-end view of every third-party tool call AND every agent self-claim gate decision. The Inspect bridge and the framework adapters consume envelopes off-host; they don't need to share the live trace.
 
