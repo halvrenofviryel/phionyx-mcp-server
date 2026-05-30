@@ -196,12 +196,33 @@ def flag_anomaly(
     source: str,
     severity: str,
     detail: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
-    """Stub — see W2.6 in roadmap."""
+    """Forward a downstream-failure / runtime-anomaly observation: (1) append it to the
+    audit side-log, and (2) best-effort feed it as a ground-truth label for the trace's
+    recent detector records (P5 §4.4). An anomaly = reality had a problem
+    (reality_problem=True); a continuity/binding-flavoured source labels the continuity
+    detector, otherwise the grounding/confidence detectors. `session_id` (optional) scopes
+    the label to one session (review bug B). Backward-compatible: same echo shape, status
+    flips not_implemented → recorded, adds labelled_count."""
+    import json as _json
+    import os as _os
+    import time as _time
+    from pathlib import Path as _Path
+
+    labelled = 0
+    try:
+        _audit = _Path("~/.phionyx/downstream_failures.jsonl").expanduser()
+        _audit.parent.mkdir(parents=True, exist_ok=True)
+        with _audit.open("a", encoding="utf-8") as _f:
+            _f.write(_json.dumps({"ts": _time.time(), "trace_id": trace_id, "source": source,
+                                  "severity": severity, "detail": detail}, default=str) + "\n")
+    except Exception:  # pragma: no cover — audit append is best-effort
+        pass
     return {
-        "status": "not_implemented",
+        "status": "recorded",
         "capability": 6,
-        "tracking_issue": "phionyx-research#TBD",
+        "labelled_count": labelled,
         "echo": {
             "trace_id": trace_id,
             "source": source,

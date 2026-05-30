@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phionyx-mcp-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "Phionyx MCP trust boundary governance layer — descriptor signing, runtime guardrail, tamper-evident audit chain for MCP-capable hosts."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -39,11 +39,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "jsonschema>=4.20",
-]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -58,10 +53,9 @@ phionyx-mcp = "phionyx_mcp_server.cli:main"
 
 [project.urls]
 Homepage = "https://phionyx.ai"
-Repository = "https://github.com/halvrenofviryel/phionyx-mcp-server"
-Documentation = "https://github.com/halvrenofviryel/phionyx-mcp-server/tree/main/specs/rge_v0_2"
-"Bug Tracker" = "https://github.com/halvrenofviryel/phionyx-mcp-server/issues"
-"Project Hub" = "https://github.com/halvrenofviryel/phionyx-research"
+Repository = "https://github.com/halvrenofviryel/phionyx-research"
+Documentation = "https://github.com/halvrenofviryel/phionyx-research/tree/main/examples/envelopes/rge_v0_2"
+"Bug Tracker" = "https://github.com/halvrenofviryel/phionyx-research/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -93,6 +93,94 @@ class ToolCallContext:
     runtime_policy_basis: list[str]
 
 
+# ── v0.7.0 W2.2 (F8) — RAG retrieval audit ─────────────────────────────
+
+
+@dataclass(frozen=True)
+class RetrievalDocument:
+    """One document in a RAG retrieval audit chain.
+
+    Maps 1:1 to the per-document object inside `retrieval.documents[]` in
+    the RGE v0.2 schema. `id` and `role` are required; the rest are
+    optional and surface only when the producer tracks them.
+    """
+
+    id: str
+    role: str  # retrieved | admitted | cited | contradicted | rejected
+    score: float | None = None
+    hash: str | None = None
+    signed_evidence_ref: str | None = None
+    chunk_offset: int | None = None  # v0.7.0 W2.2
+    source_url: str | None = None  # v0.7.0 W2.2
+    retrieved_at: str | None = None  # v0.7.0 W2.2 — ISO-8601 UTC
+
+    def to_dict(self) -> dict[str, Any]:
+        """Schema-compliant dict — only includes fields the schema permits.
+
+        `hash` and `signed_evidence_ref` are skipped when None because the
+        schema allows them but doesn't require null; the v0.2 schema's
+        `additionalProperties=false` enforces no other keys. Mandatory
+        fields (`id`, `role`) are always present.
+        """
+        d: dict[str, Any] = {"id": self.id, "role": self.role}
+        # Schema permits null for these; emit explicitly so consumers can
+        # distinguish "tracked but absent" from "not tracked at all".
+        d["score"] = self.score
+        if self.hash is not None:
+            d["hash"] = self.hash
+        d["signed_evidence_ref"] = self.signed_evidence_ref
+        d["chunk_offset"] = self.chunk_offset
+        d["source_url"] = self.source_url
+        d["retrieved_at"] = self.retrieved_at
+        return d
+
+
+@dataclass(frozen=True)
+class RetrievalContext:
+    """The minimum a host must surface for an active retrieval audit block.
+
+    `status='active'` is set implicitly when this context is passed to
+    `build_envelope`. Producers that have not implemented retrieval audit
+    can omit the kwarg entirely; the envelope will not carry a retrieval
+    block and the schema will still validate.
+    """
+
+    documents: list[RetrievalDocument]
+    store_id: str | None = None
+    corpus_name: str | None = None  # v0.7.0 W2.2
+    corpus_version: str | None = None
+    corpus_language: str | None = None
+    similarity_threshold: float | None = None  # v0.7.0 W2.2
+    query_hash: str | None = None
+    query_text_hash: str | None = None  # v0.7.0 W2.2
+
+
+def build_retrieval_block(ctx: RetrievalContext) -> dict[str, Any]:
+    """Build the v0.2 `retrieval` block dict from a RetrievalContext.
+
+    Schema-conformant output ready to drop into envelope["retrieval"].
+    Always emits `status="active"` because the caller has actual
+    documents to record; `reserved-for-v0.4.1-f8` is the absent-block
+    sentinel and is never produced by this builder.
+    """
+    block: dict[str, Any] = {
+        "status": "active",
+        "documents": [d.to_dict() for d in ctx.documents],
+    }
+    if ctx.store_id is not None:
+        block["store_id"] = ctx.store_id
+    if ctx.corpus_name is not None:
+        corpus: dict[str, Any] = {"name": ctx.corpus_name}
+        corpus["version"] = ctx.corpus_version
+        corpus["language"] = ctx.corpus_language
+        block["corpus"] = corpus
+    block["similarity_threshold"] = ctx.similarity_threshold
+    if ctx.query_hash is not None:
+        block["query_hash"] = ctx.query_hash
+    block["query_text_hash"] = ctx.query_text_hash
+    return block
+
+
 class EnvelopeStore(Protocol):
     """Pluggable persistence for envelopes + chain head per trace."""
 
@@ -179,12 +267,19 @@ def build_envelope(
     previous_hash: str,
     server_version: str,
     signer: "Signer",
+    retrieval: RetrievalContext | None = None,
 ) -> dict[str, Any]:
     """Build a v0.2 RGE envelope with the ``mcp_tool_audit`` block populated.
 
     ``previous_hash`` is the chain head for ``ctx.trace_id``. ``signer``
     produces the ``integrity.signature`` (Ed25519 in production, HMAC
     in demo mode).
+
+    Optional ``retrieval`` (v0.7.0 W2.2, F8): when provided, populates
+    the v0.2 ``retrieval`` block with ``status='active'`` and the
+    documents/corpus/threshold metadata from the RetrievalContext.
+    Omitting the kwarg keeps backward-compat — the envelope simply has
+    no retrieval block (schema-valid because the block is optional).
     """
     path_steps = [
         {"block": "input_safety_gate", "disposition": "admit", "reason": None},
@@ -266,9 +361,24 @@ def build_envelope(
             "confidence_delta": None,
             "evidence_links": [],
             "scoring_method": f"{RUNTIME}.v{server_version}.placeholder",
+            # v0.7.0 W2.1 (F4) — reasoning surface extension. Default
+            # null/empty so envelopes from producers that do not surface
+            # reasoning metadata stay valid; producers that do surface it
+            # populate via the BuildEnvelopeContext extension or by
+            # post-processing the dict before signing.
+            "rationale_summary": None,
+            "knowledge_sources_consulted": [],
+            "constraints_acknowledged": [],
         },
         "mcp_tool_audit": mcp_tool_audit,
     }
+
+    # v0.7.0 W2.2 (F8) — populate optional retrieval block when the
+    # producer surfaced retrieval evidence for this turn. Block is
+    # opt-in: builder callers without RAG evidence omit the kwarg and
+    # the envelope simply has no `retrieval` key (schema permits absence).
+    if retrieval is not None:
+        payload["retrieval"] = build_retrieval_block(retrieval)
 
     # Compute hash with signed_envelope_ref normalised to None (self-
     # referential field is OUTSIDE the hash domain — see module docstring).
