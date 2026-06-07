@@ -41,7 +41,7 @@ shared session trace, so both governance surfaces share one view.
 
 ## Status
 
-**v0.1.0.** Five of eight capabilities are fully implemented; three are explicit
+**v0.2.0.** Five of eight capabilities are fully implemented; three are explicit
 stubs that return structured `not_implemented` markers (callers can detect server
 maturity). The two load-bearing capabilities — descriptor verification and
 tool-call audit — are live. Envelopes follow **RGE v0.2** (Reasoned Governance
