@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phionyx-mcp-server"
-version = "0.1.0-dev"
+version = "0.2.0"
 description = "Phionyx MCP trust boundary governance layer — descriptor signing, runtime guardrail, tamper-evident audit chain for MCP-capable hosts."
 readme = "README.md"
 requires-python = ">=3.10"
