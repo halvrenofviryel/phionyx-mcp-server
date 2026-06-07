@@ -27,21 +27,25 @@ cross-attribute them:
   chain). `pip install phionyx-core`.
 - **Gate — `phionyx-pipeline-mcp`:** an agent self-claim gate that verifies
   "I fixed / I tested / this changed" against the repository's actual diff.
-- **Standard — `phionyx-evaluation-standard`:** a vendor-neutral spec defining
-  L0-L3 (evaluation maturity), D0-D3 (determinism), and CG-L0…CG-L5
-  (claim-governance).
+- **Format — AI Runtime Evidence Protocol (AIREP):** an experimental,
+  vendor-neutral open format for an AI **decision receipt** — one signed,
+  hash-chained, offline-checkable record per runtime decision, readable by anyone
+  and tied to no vendor. AIREP is a *proposed* format, not a ratified standard.
+  Phionyx's **Reasoned Governance Envelope (RGE)** is AIREP's reference producer
+  (the first system that emits AIREP records; it matures by conforming).
 
 **This package** is the outward MCP **trust boundary** — it produces signed,
-hash-chained evidence over third-party MCP tool calls. It interoperates with the gate
-through a shared session trace, so both governance surfaces share one view.
+hash-chained evidence over third-party MCP tool calls. The envelopes it emits are
+RGE records (a Phionyx profile of AIREP). It interoperates with the gate through a
+shared session trace, so both governance surfaces share one view.
 
 ## Status
 
-**v0.2.0.** Five of eight capabilities are fully implemented; three are explicit
+**v0.1.0.** Five of eight capabilities are fully implemented; three are explicit
 stubs that return structured `not_implemented` markers (callers can detect server
 maturity). The two load-bearing capabilities — descriptor verification and
-tool-call audit — are live. Envelopes follow **RGE v0.2** (Runtime Governance
-Envelope).
+tool-call audit — are live. Envelopes follow **RGE v0.2** (Reasoned Governance
+Envelope), the Phionyx profile of AIREP.
 
 | # | Capability | Status |
 |---|---|---|
@@ -118,7 +122,8 @@ implementation (S3, DynamoDB, …).
 
 ## Schema — RGE v0.2
 
-Envelopes conform to **RGE v0.2** (Runtime Governance Envelope). The signature
+Envelopes conform to **RGE v0.2** (Reasoned Governance Envelope), the Phionyx
+profile of the AI Runtime Evidence Protocol (AIREP). The signature
 covers all envelope content except the self-referential
 `mcp_tool_audit.signed_envelope_ref`. The schema, RFC, and worked examples ship in
 this repository.
@@ -138,7 +143,7 @@ hash-chain integrity (tamper, reorder, and mixed-schema detection).
 
 - **Engine** — [phionyx-core on PyPI](https://pypi.org/project/phionyx-core/)
 - **Gate** — [phionyx-pipeline-mcp](https://github.com/halvrenofviryel/phionyx-pipeline-mcp)
-- **Standard** — [phionyx-evaluation-standard](https://github.com/halvrenofviryel/phionyx-evaluation-standard)
+- **Evidence format** — [AI Runtime Evidence Protocol (AIREP)](https://github.com/halvrenofviryel/ai-runtime-evidence-protocol)
 - **Runtime narrative** — [phionyx.ai](https://phionyx.ai)
 
 ## License
