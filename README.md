@@ -22,7 +22,7 @@ Model Context Protocol*) — tool poisoning, shadowing, rug pulls.
 Phionyx ships three distinct things, each on its own version line — don't
 cross-attribute them:
 
-- **Engine — `phionyx-core`:** the deterministic-cognition runtime (46-block
+- **Engine — `phionyx-core`:** the deterministic governance runtime (46-block
   canonical pipeline, kill switch, HITL queue, ethics/safety gates, signed audit
   chain). `pip install phionyx-core`.
 - **Gate — `phionyx-pipeline-mcp`:** an agent self-claim gate that verifies
