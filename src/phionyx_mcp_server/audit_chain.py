@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import hmac
 import json
 import os
 from dataclasses import dataclass
@@ -261,6 +262,40 @@ class FilesystemEnvelopeStore:
                 yield json.loads(envelope_path.read_text(encoding="utf-8"))
 
 
+class Verifier(Protocol):
+    """Minimal verifier surface: True iff ``signature`` is valid over ``current_hash``."""
+
+    def verify(self, current_hash: str, signature: str) -> bool: ...
+
+
+def _descriptor_verify_outcome(detected: "bool | None") -> dict[str, Any]:
+    """Three outcomes, not two.
+
+    0.2.0 read ``detected or False``, so ``None`` — meaning *no comparison was
+    performed* — took the same branch as ``False`` and the envelope recorded
+    ``admit`` with the reason "descriptor hash matches user-approved baseline".
+    That sentence was then hash-chained and signed. Nothing had been compared.
+    """
+    if detected is None:
+        return {
+            "disposition": "escalate",
+            "reason": "descriptor not compared against a baseline — no result",
+            "measurement_status": "NOT_MEASURED",
+            "non_measurement_cause": "input_absent",
+        }
+    if detected:
+        return {
+            "disposition": "block",
+            "reason": "descriptor change detected — re-approval required",
+            "measurement_status": "FAIL",
+        }
+    return {
+        "disposition": "admit",
+        "reason": "descriptor hash matches user-approved baseline",
+        "measurement_status": "PASS",
+    }
+
+
 def build_envelope(
     ctx: ToolCallContext,
     *,
@@ -285,12 +320,7 @@ def build_envelope(
         {"block": "input_safety_gate", "disposition": "admit", "reason": None},
         {
             "block": "mcp_tool_descriptor_verify",
-            "disposition": "admit" if not (ctx.descriptor_change_detected or False) else "block",
-            "reason": (
-                "descriptor hash matches user-approved baseline"
-                if not (ctx.descriptor_change_detected or False)
-                else "descriptor change detected — re-approval required"
-            ),
+            **_descriptor_verify_outcome(ctx.descriptor_change_detected),
         },
         {
             "block": "action_intent_gate",
@@ -413,17 +443,52 @@ class HmacSigner:
         digest = hashlib.sha256(current_hash.encode("utf-8") + self._secret).hexdigest()
         return f"demo-hmac:{digest[:16]}"
 
+    def verify(self, current_hash: str, signature: str) -> bool:
+        """New in 0.2.1 — 0.2.0 could sign and had no way to check.
 
-def verify_chain(envelopes: list[dict[str, Any]]) -> dict[str, Any]:
+        Constant-time comparison so a caller cannot learn the digest by timing.
+        This is the demo signer: a secret shipped inside the package can be
+        recomputed by anyone holding it, so a chain signed this way is evidence
+        level E0, not E1. Production uses Ed25519.
+        """
+        return hmac.compare_digest(self.sign(current_hash), signature)
+
+
+def verify_chain(
+    envelopes: list[dict[str, Any]], *, verifier: "Verifier | None" = None
+) -> dict[str, Any]:
     """Walk a chain of envelopes and verify integrity.
 
-    Returns ``{"valid": bool, "checked": int, "broken_at": int | None, "reason": str | None}``.
+    Returns ``{"valid": bool | None, "checked": int, "broken_at": int | None,
+    "reason": str | None}`` plus ``hash_chain_valid`` and
+    ``signatures_verified``.
 
     Refuses to walk across schema boundaries (per RGE v0.2 migration
     doc §5.3 — mixed-schema chains break by design).
+
+    **Two results are not "valid", and in 0.2.0 both returned ``True``.** An
+    empty chain has nothing to check. A walk with no ``verifier`` checks hash
+    linkage and content hashes but not signatures, so a record whose signature
+    was altered survives it. Both now return ``valid: None`` — falsy, so a
+    caller testing truthiness fails closed — carrying a ``measurement_status``
+    that says which question went unanswered.
+
+    ``verifier`` is new in 0.2.1 and optional: anything with
+    ``verify(current_hash, signature) -> bool``. Without it there is no path to
+    a positive verification, which is why it is added in a patch rather than
+    left for a minor.
     """
     if not envelopes:
-        return {"valid": True, "checked": 0, "broken_at": None, "reason": None}
+        return {
+            "valid": None,
+            "checked": 0,
+            "broken_at": None,
+            "reason": "no envelopes to verify — nothing was checked",
+            "measurement_status": "NOT_MEASURED",
+            "non_measurement_cause": "input_absent",
+            "hash_chain_valid": None,
+            "signatures_verified": False,
+        }
 
     schemas = {e.get("schema", "<missing>") for e in envelopes}
     if len(schemas) > 1:
@@ -469,6 +534,45 @@ def verify_chain(envelopes: list[dict[str, Any]]) -> dict[str, Any]:
                 ),
             }
 
+        if verifier is not None and not verifier.verify(
+            current, integrity.get("signature", "")
+        ):
+            return {
+                "valid": False,
+                "checked": i,
+                "broken_at": i,
+                "reason": (
+                    f"signature verification failed at turn "
+                    f"{env.get('subject', {}).get('turn_index')}"
+                ),
+                "measurement_status": "FAIL",
+                "hash_chain_valid": True,
+                "signatures_verified": True,
+            }
+
         expected_previous = current
 
-    return {"valid": True, "checked": len(envelopes), "broken_at": None, "reason": None}
+    if verifier is None:
+        return {
+            "valid": None,
+            "checked": len(envelopes),
+            "broken_at": None,
+            "reason": (
+                "hash chain intact; signatures not verified — pass a verifier to "
+                "check tamper-evidence"
+            ),
+            "measurement_status": "NOT_MEASURED",
+            "non_measurement_cause": "not_executed",
+            "hash_chain_valid": True,
+            "signatures_verified": False,
+        }
+
+    return {
+        "valid": True,
+        "checked": len(envelopes),
+        "broken_at": None,
+        "reason": None,
+        "measurement_status": "PASS",
+        "hash_chain_valid": True,
+        "signatures_verified": True,
+    }
