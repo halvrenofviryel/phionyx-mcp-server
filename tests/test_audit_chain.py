@@ -117,13 +117,19 @@ def test_chain_persistence_round_trip(store, signer, validator):
 
 
 def test_verify_chain_accepts_intact_chain(store, signer):
-    """Capability 8: verify_chain returns valid=True for an intact chain."""
+    """Capability 8: an intact chain verifies — hashes AND signatures.
+
+    The verifier is passed explicitly. Without it this asserted valid is True
+    while checking only hashes, which is the default-path finding of the
+    2026-08-01 audit: a claim of verification standing on a check that never
+    looked at signatures.
+    """
     trace = "trace-intact"
     for turn in range(1, 4):
         env = build_envelope(_ctx(turn, trace=trace), previous_hash=store.head(trace), server_version="0.1.0-dev", signer=signer)
         store.append(trace, env)
 
-    result = verify_chain(list(store.iter_chain(trace)))
+    result = verify_chain(list(store.iter_chain(trace)), verifier=signer)
     assert result["valid"] is True
     assert result["checked"] == 3
     assert result["broken_at"] is None
@@ -170,9 +176,17 @@ def test_verify_chain_refuses_mixed_schemas(store, signer):
     assert "mixed schemas" in result["reason"]
 
 
-def test_verify_empty_chain_is_trivially_valid():
+def test_verify_empty_chain_is_not_measured_not_valid():
+    """There is no "trivially valid" chain — there is a chain nobody walked.
+
+    The old name and assertion enshrined the first finding of the Measurement
+    Axioms self-audit of 2026-08-01: a passing test recording a non-measurement
+    as a positive result.
+    """
     result = verify_chain([])
-    assert result["valid"] is True
+    assert result["valid"] is None
+    assert result["measurement_status"] == "NOT_MEASURED"
+    assert not result["valid"], "a caller testing truthiness must not see a pass"
     assert result["checked"] == 0
 
 
@@ -400,9 +414,12 @@ def test_w2_2_chain_verifies_with_retrieval_blocks(signer, store):
 
     chain = list(store.iter_chain("t-abc"))
     assert len(chain) == 3
-    result = verify_chain(chain)
+    # Verifier passed: the claim is "verifies end-to-end", and end-to-end
+    # includes the signatures.
+    result = verify_chain(chain, verifier=signer)
     assert result["valid"] is True
     assert result["checked"] == 3
+    assert result["signatures_verified"] is True
     # The middle envelope carries retrieval; verify it's there
     assert "retrieval" in chain[1]
     assert "retrieval" not in chain[0]
