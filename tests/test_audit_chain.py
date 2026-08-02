@@ -414,9 +414,12 @@ def test_w2_2_chain_verifies_with_retrieval_blocks(signer, store):
 
     chain = list(store.iter_chain("t-abc"))
     assert len(chain) == 3
-    result = verify_chain(chain)
+    # Verifier passed: the claim is "verifies end-to-end", and end-to-end
+    # includes the signatures.
+    result = verify_chain(chain, verifier=signer)
     assert result["valid"] is True
     assert result["checked"] == 3
+    assert result["signatures_verified"] is True
     # The middle envelope carries retrieval; verify it's there
     assert "retrieval" in chain[1]
     assert "retrieval" not in chain[0]
