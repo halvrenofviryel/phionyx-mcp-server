@@ -31,8 +31,8 @@ cross-attribute them:
   vendor-neutral open format for an AI **decision receipt** — one signed,
   hash-chained, offline-checkable record per runtime decision, readable by anyone
   and tied to no vendor. AIREP is a *proposed* format, not a ratified standard.
-  Phionyx's **Reasoned Governance Envelope (RGE)** is AIREP's reference producer
-  (the first system that emits AIREP records; it matures by conforming).
+  Phionyx's **Reasoned Governance Envelope (RGE)** is developed alongside AIREP;
+  a conformant projection between the two is **not implemented** (measured 2026-08-06: AIREP's own reference verifier rejects an RGE envelope handed to it directly).
 
 **This package** is the outward MCP **trust boundary** — it produces signed,
 hash-chained evidence over third-party MCP tool calls. The envelopes it emits are
