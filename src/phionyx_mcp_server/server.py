@@ -14,9 +14,9 @@ from mcp.server.fastmcp import FastMCP
 from . import __version__
 from .audit_chain import (
     FilesystemEnvelopeStore,
-    HmacSigner,
     ToolCallContext,
     build_envelope,
+    get_signer,
     verify_chain,
 )
 from .descriptor_hash import compare_descriptor_hashes, hash_descriptor
@@ -24,7 +24,10 @@ from .trace import resolve_active_trace_id
 
 
 _store = FilesystemEnvelopeStore()
-_signer = HmacSigner()
+# WP-11: select the signer from the environment — Ed25519 when PHIONYX_MCP_SIGNING_KEY is set,
+# demo HMAC only under PHIONYX_MCP_DEMO=1, else explicitly UNSIGNED. Never a silent demo signature
+# standing in for a missing production key.
+_signer = get_signer()
 
 mcp = FastMCP("phionyx-mcp-server")
 

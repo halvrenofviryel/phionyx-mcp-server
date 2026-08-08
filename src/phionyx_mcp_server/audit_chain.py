@@ -454,6 +454,137 @@ class HmacSigner:
         return hmac.compare_digest(self.sign(current_hash), signature)
 
 
+# ── WP-11 — production signer/verifier contract ────────────────────────────
+# Three signer modes, selected by env (get_signer), never silently defaulting to
+# the demo secret in a real run:
+#   PHIONYX_MCP_SIGNING_KEY set  -> Ed25519Signer  (real asymmetric signature)
+#   PHIONYX_MCP_DEMO=1           -> HmacSigner      (E0; the secret ships in-package)
+#   neither                      -> UnsignedSigner  (alg='unsigned'; no signature performed)
+# A signature string names its algorithm by prefix: 'ed25519:<hex>',
+# 'demo-hmac:<hex>', or the bare sentinel 'unsigned'. The verifier reads the
+# prefix; there is no structured signature object (that would be an RGE schema
+# bump, out of scope here).
+
+_ED25519_PREFIX = "ed25519:"
+
+
+def signature_algorithm(signature: str) -> str:
+    """The algorithm a signature string declares, by prefix. Absent/empty/sentinel -> 'unsigned'."""
+    if not isinstance(signature, str) or signature == "" or signature == "unsigned":
+        return "unsigned"
+    if ":" in signature:
+        return signature.split(":", 1)[0]
+    return "unknown"
+
+
+def _load_key_material(key: str) -> str:
+    """Resolve a key argument to hex: a path to a key file (last non-comment line) or a bare hex."""
+    p = Path(key).expanduser()
+    if p.exists():
+        lines = [ln.strip() for ln in p.read_text().splitlines() if ln.strip() and not ln.startswith("#")]
+        return lines[-1] if lines else ""
+    return key.strip()
+
+
+class UnsignedSigner:
+    """No signature is performed. Emits the sentinel 'unsigned' so the envelope records,
+    unambiguously, that it carries no cryptographic authorship — never a silent demo signature
+    standing in for a missing production key. Evidence level E0 (no signature at all)."""
+
+    algorithm = "unsigned"
+    key_id: str | None = None
+
+    def sign(self, current_hash: str) -> str:
+        return "unsigned"
+
+    def verify(self, current_hash: str, signature: str) -> bool:
+        # Nothing to verify: an unsigned record makes no authorship claim to check. This returns
+        # True only for the sentinel itself (the record is a faithfully-unsigned record), and the
+        # richer verify_chain reports signature_performed=False / overall E0 so no caller can read
+        # this as a cryptographic pass.
+        return signature == "unsigned"
+
+
+class Ed25519Signer:
+    """Production signer. Holds an Ed25519 private key (32-byte seed, hex) and signs the
+    ``integrity.current`` string. Signature format: ``ed25519:<128-hex>``. Carries ``key_id`` and
+    ``algorithm`` so the verifier can report which key it checked against."""
+
+    algorithm = "ed25519"
+
+    def __init__(self, private_key_hex: str, key_id: str = "phionyx-mcp-ed25519") -> None:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        self._sk = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private_key_hex))
+        self.key_id = key_id
+
+    def sign(self, current_hash: str) -> str:
+        return _ED25519_PREFIX + self._sk.sign(current_hash.encode("utf-8")).hex()
+
+    @property
+    def public_key_hex(self) -> str:
+        from cryptography.hazmat.primitives import serialization
+
+        return self._sk.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
+
+    def verify(self, current_hash: str, signature: str) -> bool:
+        return Ed25519Verifier(self.public_key_hex, self.key_id).verify(current_hash, signature)
+
+
+class Ed25519Verifier:
+    """Verifies ``ed25519:<hex>`` signatures under an operator-supplied public key."""
+
+    algorithm = "ed25519"
+
+    def __init__(self, public_key_hex: str, key_id: str = "phionyx-mcp-ed25519") -> None:
+        self._pub_hex = public_key_hex.strip().lower()
+        self.key_id = key_id
+
+    def verify(self, current_hash: str, signature: str) -> bool:
+        if not isinstance(signature, str) or not signature.startswith(_ED25519_PREFIX):
+            return False
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+            Ed25519PublicKey.from_public_bytes(bytes.fromhex(self._pub_hex)).verify(
+                bytes.fromhex(signature[len(_ED25519_PREFIX):]), current_hash.encode("utf-8"))
+            return True
+        except Exception:
+            return False
+
+
+def get_signer() -> "Signer":
+    """Select the signer from the environment — never a silent demo signature in a real run.
+
+    ``PHIONYX_MCP_SIGNING_KEY`` (path or hex) -> Ed25519Signer (key_id via
+    ``PHIONYX_MCP_KEY_ID``). Else ``PHIONYX_MCP_DEMO=1`` -> HmacSigner (E0). Else ->
+    UnsignedSigner (alg='unsigned'). A real run with no key provisioned therefore emits explicitly
+    UNSIGNED envelopes rather than demo-signed ones that look real."""
+    key = os.environ.get("PHIONYX_MCP_SIGNING_KEY")
+    if key:
+        return Ed25519Signer(_load_key_material(key),
+                             key_id=os.environ.get("PHIONYX_MCP_KEY_ID", "phionyx-mcp-ed25519"))
+    if os.environ.get("PHIONYX_MCP_DEMO") == "1":
+        return HmacSigner()
+    return UnsignedSigner()
+
+
+def get_verifier() -> "Verifier | None":
+    """Select the verifier from the environment, mirroring get_signer.
+
+    ``PHIONYX_MCP_VERIFY_KEY`` (public key, path or hex) -> Ed25519Verifier. Else
+    ``PHIONYX_MCP_DEMO=1`` -> HmacSigner (recomputes the demo secret). Else None — meaning
+    signatures cannot be checked, and verify_chain reports NOT_MEASURED rather than a pass."""
+    key = os.environ.get("PHIONYX_MCP_VERIFY_KEY")
+    if key:
+        return Ed25519Verifier(_load_key_material(key),
+                               key_id=os.environ.get("PHIONYX_MCP_KEY_ID", "phionyx-mcp-ed25519"))
+    if os.environ.get("PHIONYX_MCP_DEMO") == "1":
+        return HmacSigner()
+    return None
+
+
 def verify_chain(
     envelopes: list[dict[str, Any]], *, verifier: "Verifier | None" = None
 ) -> dict[str, Any]:
@@ -478,26 +609,56 @@ def verify_chain(
     a positive verification, which is why it is added in a patch rather than
     left for a minor.
     """
-    if not envelopes:
-        return {
-            "valid": None,
-            "checked": 0,
-            "broken_at": None,
-            "reason": "no envelopes to verify — nothing was checked",
-            "measurement_status": "NOT_MEASURED",
-            "non_measurement_cause": "input_absent",
-            "hash_chain_valid": None,
-            "signatures_verified": False,
+    # WP-11 req 4: every result carries an ``assurance`` block that separates the dimensions —
+    # schema, hash/continuity, signature-performed, signature-valid, algorithm, key-id, key-trust,
+    # revocation, overall. Dimensions the RGE v0.2 envelope structurally cannot carry (key_trust,
+    # revocation — AIREP-profile concepts) are reported NOT_MEASURED, never faked as a pass.
+    def _result(valid, checked, broken_at, reason, *, schema, hash_continuity,
+                signature_performed, signature_valid, algorithm, key_id,
+                measurement_status=None, non_measurement_cause=None):
+        overall = _overall_assurance(valid, algorithm, signature_valid)
+        out = {
+            "valid": valid, "checked": checked, "broken_at": broken_at, "reason": reason,
+            "hash_chain_valid": {"PASS": True, "FAIL": False}.get(hash_continuity),
+            "signatures_verified": signature_valid == "PASS",
+            "assurance": {
+                "schema": schema,
+                "hash_continuity": hash_continuity,
+                "signature_performed": signature_performed,
+                "signature_valid": signature_valid,
+                "algorithm": algorithm,
+                "key_id": key_id,
+                "key_trust": "NOT_MEASURED",     # no key_trust profile in RGE v0.2 (AIREP concern)
+                "revocation": "NOT_MEASURED",     # no revocation source consulted at this layer
+                "overall_assurance": overall,
+            },
         }
+        if measurement_status is not None:
+            out["measurement_status"] = measurement_status
+        if non_measurement_cause is not None:
+            out["non_measurement_cause"] = non_measurement_cause
+        return out
+
+    if not envelopes:
+        return _result(None, 0, None, "no envelopes to verify — nothing was checked",
+                       schema="NOT_MEASURED", hash_continuity="NOT_MEASURED",
+                       signature_performed=False, signature_valid="NOT_MEASURED",
+                       algorithm=None, key_id=None,
+                       measurement_status="NOT_MEASURED", non_measurement_cause="input_absent")
 
     schemas = {e.get("schema", "<missing>") for e in envelopes}
     if len(schemas) > 1:
-        return {
-            "valid": False,
-            "checked": 0,
-            "broken_at": 0,
-            "reason": f"mixed schemas in chain: {schemas}",
-        }
+        return _result(False, 0, 0, f"mixed schemas in chain: {schemas}",
+                       schema="FAIL", hash_continuity="NOT_MEASURED",
+                       signature_performed=False, signature_valid="NOT_MEASURED",
+                       algorithm=None, key_id=None, measurement_status="FAIL")
+
+    # Algorithm declared across the chain, read from each signature's prefix (see
+    # signature_algorithm). One algorithm -> that name; more than one -> "mixed".
+    algs = {signature_algorithm(e.get("integrity", {}).get("signature", "")) for e in envelopes}
+    algorithm = next(iter(algs)) if len(algs) == 1 else "mixed"
+    signature_performed = algorithm not in ("unsigned", None)
+    key_id = getattr(verifier, "key_id", None) if verifier is not None else None
 
     expected_previous = GENESIS_HASH
     for i, env in enumerate(envelopes):
@@ -506,73 +667,69 @@ def verify_chain(
             previous = integrity["previous"]
             current = integrity["current"]
         except KeyError as e:
-            return {"valid": False, "checked": i, "broken_at": i, "reason": f"missing field: {e}"}
+            return _result(False, i, i, f"missing field: {e}", schema="PASS",
+                           hash_continuity="FAIL", signature_performed=signature_performed,
+                           signature_valid="NOT_MEASURED", algorithm=algorithm, key_id=key_id,
+                           measurement_status="FAIL")
 
         if previous != expected_previous:
-            return {
-                "valid": False,
-                "checked": i,
-                "broken_at": i,
-                "reason": (
-                    f"previous hash mismatch at turn {env.get('subject', {}).get('turn_index')}: "
-                    f"expected {expected_previous}, got {previous}"
-                ),
-            }
+            return _result(
+                False, i, i,
+                f"previous hash mismatch at turn {env.get('subject', {}).get('turn_index')}: "
+                f"expected {expected_previous}, got {previous}",
+                schema="PASS", hash_continuity="FAIL", signature_performed=signature_performed,
+                signature_valid="NOT_MEASURED", algorithm=algorithm, key_id=key_id,
+                measurement_status="FAIL")
 
         # Recompute current from the envelope content (excluding the integrity block
         # itself and normalising the self-referential signed_envelope_ref to None).
         payload = {k: v for k, v in env.items() if k != "integrity"}
         recomputed = envelope_hash(payload_for_hash(payload), previous)
         if recomputed != current:
-            return {
-                "valid": False,
-                "checked": i,
-                "broken_at": i,
-                "reason": (
-                    f"content hash mismatch at turn {env.get('subject', {}).get('turn_index')}: "
-                    f"recomputed {recomputed}, stored {current}"
-                ),
-            }
+            return _result(
+                False, i, i,
+                f"content hash mismatch at turn {env.get('subject', {}).get('turn_index')}: "
+                f"recomputed {recomputed}, stored {current}",
+                schema="PASS", hash_continuity="FAIL", signature_performed=signature_performed,
+                signature_valid="NOT_MEASURED", algorithm=algorithm, key_id=key_id,
+                measurement_status="FAIL")
 
-        if verifier is not None and not verifier.verify(
-            current, integrity.get("signature", "")
-        ):
-            return {
-                "valid": False,
-                "checked": i,
-                "broken_at": i,
-                "reason": (
-                    f"signature verification failed at turn "
-                    f"{env.get('subject', {}).get('turn_index')}"
-                ),
-                "measurement_status": "FAIL",
-                "hash_chain_valid": True,
-                "signatures_verified": True,
-            }
+        if verifier is not None and not verifier.verify(current, integrity.get("signature", "")):
+            return _result(
+                False, i, i,
+                f"signature verification failed at turn "
+                f"{env.get('subject', {}).get('turn_index')}",
+                schema="PASS", hash_continuity="PASS", signature_performed=signature_performed,
+                signature_valid="FAIL", algorithm=algorithm, key_id=key_id,
+                measurement_status="FAIL")
 
         expected_previous = current
 
     if verifier is None:
-        return {
-            "valid": None,
-            "checked": len(envelopes),
-            "broken_at": None,
-            "reason": (
-                "hash chain intact; signatures not verified — pass a verifier to "
-                "check tamper-evidence"
-            ),
-            "measurement_status": "NOT_MEASURED",
-            "non_measurement_cause": "not_executed",
-            "hash_chain_valid": True,
-            "signatures_verified": False,
-        }
+        return _result(
+            None, len(envelopes), None,
+            "hash chain intact; signatures not verified — pass a verifier to check tamper-evidence",
+            schema="PASS", hash_continuity="PASS", signature_performed=signature_performed,
+            signature_valid="NOT_MEASURED", algorithm=algorithm, key_id=key_id,
+            measurement_status="NOT_MEASURED", non_measurement_cause="not_executed")
 
-    return {
-        "valid": True,
-        "checked": len(envelopes),
-        "broken_at": None,
-        "reason": None,
-        "measurement_status": "PASS",
-        "hash_chain_valid": True,
-        "signatures_verified": True,
-    }
+    return _result(
+        True, len(envelopes), None, None,
+        schema="PASS", hash_continuity="PASS", signature_performed=signature_performed,
+        signature_valid="PASS", algorithm=algorithm, key_id=key_id, measurement_status="PASS")
+
+
+def _overall_assurance(valid, algorithm: str | None, signature_valid: str) -> str:
+    """Collapse the dimensions into one evidence level.
+
+    ``INVALID`` any hard failure · ``E0`` unsigned or demo-hmac (the demo secret ships in-package,
+    so a "valid" demo signature proves nothing) · ``E1`` real (ed25519) signature present but NOT
+    verified this run · ``E2`` real signature verified. Mixed algorithms cannot make a clean claim
+    and collapse to ``E0``."""
+    if valid is False:
+        return "INVALID"
+    if algorithm in ("unsigned", None, "demo-hmac", "mixed", "unknown"):
+        return "E0"
+    if algorithm == "ed25519":
+        return "E2" if signature_valid == "PASS" else "E1"
+    return "E0"

@@ -106,7 +106,23 @@ phionyx-mcp verify-chain --trace trace-abc123  # walk + verify the chain
 phionyx-mcp show --trace trace-abc123 --turn 7 # show one envelope
 ```
 
-The CLI exits 0 on a valid chain, 1 on tamper/break, 2 on invocation error.
+`verify-chain` selects its verifier from the environment: `PHIONYX_MCP_VERIFY_KEY`
+(Ed25519 public key, hex or path) → verify signatures; `PHIONYX_MCP_DEMO=1` → the
+demo HMAC verifier; neither → **signatures are not checked** (hash continuity only).
+
+**Exit code — the same contract the printed `assurance` block reports:**
+
+| exit | meaning |
+|---|---|
+| `0` | signatures verified (`valid: true` — assurance **E2**, or **E0** in demo mode) |
+| `1` | tamper/break (`valid: false`), **or** signatures not verified (`valid: null`, `NOT_MEASURED` — no verify key, so tamper-evidence is unmeasured, never a silent pass) |
+| `2` | invocation error (bad path / corrupt chain) |
+
+The result carries an `assurance` block separating the dimensions — `schema`,
+`hash_continuity`, `signature_performed`, `signature_valid`, `algorithm`, `key_id`,
+`key_trust`, `revocation`, `overall_assurance` (E0/E1/E2/INVALID). `key_trust` and
+`revocation` are `NOT_MEASURED` here — they are AIREP-profile concerns an RGE v0.2
+envelope does not carry, reported rather than faked.
 
 ## Persistence
 
@@ -127,6 +143,18 @@ profile of the AI Runtime Evidence Protocol (AIREP). The signature
 covers all envelope content except the self-referential
 `mcp_tool_audit.signed_envelope_ref`. The schema, RFC, and worked examples ship in
 this repository.
+
+### Signing — the signer is chosen by the environment
+
+| environment | signer | `integrity.signature` |
+|---|---|---|
+| `PHIONYX_MCP_SIGNING_KEY` set (hex or path; `PHIONYX_MCP_KEY_ID` optional) | **Ed25519** (production) | `ed25519:<hex>` |
+| `PHIONYX_MCP_DEMO=1` | demo HMAC (evidence level **E0** — the secret ships in-package) | `demo-hmac:<hex>` |
+| neither | **UNSIGNED** | `unsigned` |
+
+A run with no key provisioned emits **explicitly unsigned** envelopes — the demo
+HMAC is never a silent stand-in for a missing production key. A real Ed25519 key
+always wins over the demo flag.
 
 ## Tests
 
