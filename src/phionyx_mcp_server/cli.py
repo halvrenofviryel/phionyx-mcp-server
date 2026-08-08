@@ -2,8 +2,14 @@
 
 Subcommands:
     verify-chain --trace <id> [--turn <n>]
-        Walk and verify the persisted chain for a trace. Exits 0 on
-        valid chain, 1 on tamper/break, 2 on invocation error.
+        Walk and verify the persisted chain for a trace. The verifier is selected
+        from the environment (WP-11): PHIONYX_MCP_VERIFY_KEY -> Ed25519;
+        PHIONYX_MCP_DEMO=1 -> demo HMAC; neither -> no verifier (signatures NOT
+        checked). Exit contract, matching the ``assurance`` block it prints:
+          0  signatures verified (result.valid is True — assurance E2, or E0 in demo mode)
+          1  tamper/break (valid False) OR signatures not verified (valid None,
+             NOT_MEASURED — no verify key supplied, so tamper-evidence is unmeasured)
+          2  invocation error (bad path / corrupt chain)
 
     head --trace <id>
         Print the current chain head hash for a trace.
@@ -19,7 +25,7 @@ import json
 import sys
 from typing import Sequence
 
-from .audit_chain import FilesystemEnvelopeStore, verify_chain
+from .audit_chain import FilesystemEnvelopeStore, get_verifier, verify_chain
 
 
 def cmd_verify_chain(args: argparse.Namespace) -> int:
@@ -27,9 +33,11 @@ def cmd_verify_chain(args: argparse.Namespace) -> int:
     envelopes = list(store.iter_chain(args.trace))
     if args.turn is not None:
         envelopes = [e for e in envelopes if e["subject"]["turn_index"] <= args.turn]
-    result = verify_chain(envelopes)
+    # WP-11: verify signatures with the env-selected verifier. With no verify key the walk checks
+    # hash continuity only and reports NOT_MEASURED on signatures — which exits 1, not a silent 0.
+    result = verify_chain(envelopes, verifier=get_verifier())
     print(json.dumps(result, indent=2))
-    return 0 if result["valid"] else 1
+    return 0 if result["valid"] is True else 1
 
 
 def cmd_head(args: argparse.Namespace) -> int:
