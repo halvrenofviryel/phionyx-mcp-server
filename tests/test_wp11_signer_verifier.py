@@ -31,6 +31,25 @@ def _keypair():
     return seed, pub
 
 
+def test_load_key_material_strips_trailing_indented_comment(tmp_path, monkeypatch):
+    """Regression: _load_key_material must skip comment lines even when INDENTED / trailing.
+
+    The filter previously checked ``not ln.startswith('#')`` before stripping, so an indented
+    comment as the last line survived and was fed to bytes.fromhex (hard-fail). This is the same
+    bug codex found in the framework adapters, shared from this WP-11 reference.
+    """
+    for v in ("PHIONYX_MCP_SIGNING_KEY", "PHIONYX_MCP_DEMO", "PHIONYX_MCP_KEY_ID"):
+        monkeypatch.delenv(v, raising=False)
+    seed, _pub = _keypair()
+    kf = tmp_path / "key.hex"
+    kf.write_text(f"{seed}\n   # trailing indented comment\n", encoding="utf-8")
+    assert A._load_key_material(str(kf)) == seed          # the key, not the comment
+    monkeypatch.setenv("PHIONYX_MCP_SIGNING_KEY", str(kf))
+    s = A.get_signer()
+    assert isinstance(s, A.Ed25519Signer)
+    assert s.sign("sha256:x").startswith("ed25519:")
+
+
 def _chain(signer, n=2):
     kw = dict(user_text="hi", producer="test", tool_descriptor_hash="sha256:" + "a" * 64,
               descriptor_change_detected=False, tool_permission_scope=["x"],

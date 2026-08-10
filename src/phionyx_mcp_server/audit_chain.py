@@ -481,7 +481,7 @@ def _load_key_material(key: str) -> str:
     """Resolve a key argument to hex: a path to a key file (last non-comment line) or a bare hex."""
     p = Path(key).expanduser()
     if p.exists():
-        lines = [ln.strip() for ln in p.read_text().splitlines() if ln.strip() and not ln.startswith("#")]
+        lines = [s for ln in p.read_text().splitlines() if (s := ln.strip()) and not s.startswith("#")]
         return lines[-1] if lines else ""
     return key.strip()
 
