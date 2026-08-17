@@ -1,11 +1,11 @@
 # phionyx-mcp-server
 
 > The MCP trust boundary in the Phionyx runtime — descriptor signing, signed
-> evidence envelopes, and a tamper-evident audit chain over third-party MCP tool calls.
+> evidence envelopes, and a hash-chained audit chain over third-party MCP tool calls.
 
 `phionyx-mcp-server` sits between an MCP-capable host (Claude Desktop, Cursor, Zed,
 VS Code, JetBrains) and any third-party MCP server it talks to, producing
-tamper-evident evidence at every trust-boundary crossing. It closes a security gap
+hash-chained evidence at every trust-boundary crossing (un-rechained edits are detectable; producer authenticity requires a configured signer). It closes a security gap
 the MCP specification
 ([2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25)) explicitly
 defers to implementors:
