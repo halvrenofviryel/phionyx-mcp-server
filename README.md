@@ -34,9 +34,9 @@ cross-attribute them:
   Phionyx's **Reasoned Governance Envelope (RGE)** is developed alongside AIREP;
   a conformant projection between the two is **not implemented** (measured 2026-08-06: AIREP's own reference verifier rejects an RGE envelope handed to it directly).
 
-**This package** is the outward MCP **trust boundary** — it produces signed,
-hash-chained evidence over third-party MCP tool calls. The envelopes it emits are
-RGE records (a Phionyx profile of AIREP). It interoperates with the gate through a
+**This package** is the outward MCP **trust boundary** — it produces hash-chained
+evidence (optionally Ed25519-signed) over third-party MCP tool calls. The envelopes
+it emits are RGE records. It interoperates with the gate through a
 shared session trace, so both governance surfaces share one view.
 
 ## Status
@@ -45,7 +45,7 @@ shared session trace, so both governance surfaces share one view.
 stubs that return structured `not_implemented` markers (callers can detect server
 maturity). The two load-bearing capabilities — descriptor verification and
 tool-call audit — are live. Envelopes follow **RGE v0.2** (Reasoned Governance
-Envelope), the Phionyx profile of AIREP.
+Envelope).
 
 | # | Capability | Status |
 |---|---|---|
@@ -121,7 +121,7 @@ demo HMAC verifier; neither → **signatures are not checked** (hash continuity 
 The result carries an `assurance` block separating the dimensions — `schema`,
 `hash_continuity`, `signature_performed`, `signature_valid`, `algorithm`, `key_id`,
 `key_trust`, `revocation`, `overall_assurance` (E0/E1/E2/INVALID). `key_trust` and
-`revocation` are `NOT_MEASURED` here — they are AIREP-profile concerns an RGE v0.2
+`revocation` are `NOT_MEASURED` here — they are concerns AIREP defines but an RGE v0.2
 envelope does not carry, reported rather than faked.
 
 ## Persistence
@@ -138,8 +138,8 @@ implementation (S3, DynamoDB, …).
 
 ## Schema — RGE v0.2
 
-Envelopes conform to **RGE v0.2** (Reasoned Governance Envelope), the Phionyx
-profile of the AI Runtime Evidence Protocol (AIREP). The signature
+Envelopes conform to **RGE v0.2** (Reasoned Governance Envelope). RGE is being
+developed toward AIREP interoperability; no AIREP-conformance claim is made. The signature
 covers all envelope content except the self-referential
 `mcp_tool_audit.signed_envelope_ref`. The schema, RFC, and worked examples ship in
 this repository.
