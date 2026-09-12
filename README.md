@@ -31,6 +31,7 @@ cross-attribute them:
   vendor-neutral open format for an AI **decision receipt** — one signed,
   hash-chained, offline-checkable record per runtime decision, readable by anyone
   and tied to no vendor. AIREP is a *proposed* format, not a ratified standard.
+  AIREP v0.2.0-beta.1 was published on 9 September 2026 as an experimental prerelease: it ships a first-party Python producer for Decision, Control, Execution and Effect artifacts, runnable lifecycle examples and structured reconciliation; the v0.1 line remains frozen and supported. External implementation results are version- and role-specific — an independently authored producer measured against frozen v0.1.2, and an independently implemented consumer/verifier measured against an earlier v0.2 handoff — and they do not establish same-beta producer-to-consumer interoperability.
   Phionyx's **Reasoned Governance Envelope (RGE)** is developed alongside AIREP;
   a conformant projection between the two is **not implemented** (measured 2026-08-06: AIREP's own reference verifier rejects an RGE envelope handed to it directly).
 
